@@ -1,20 +1,12 @@
-import 'package:flame/collisions.dart';
-import 'package:flame/components.dart';
-import 'package:george/dialog/dialog_box.dart';
+class Player {
+  Player(this.id, this.x, this.y);
 
-class PlayerComponent extends SpriteAnimationComponent with CollisionCallbacks {
-  @override
-  Future<void> onLoad() async {
-    await super.onLoad();
-    final hitbox = RectangleHitbox();
+  final String id;
+  final double x;
+  final double y;
 
-    add(hitbox);
-    final dialog = DialogBox(
-      text:
-          "Hi. I'm George. I just moved to Happy Bay Village and I want to make friends.",
-      componentRef: this,
-    );
-
-    add(dialog);
-  }
+  Player.fromJson(Map<String, dynamic> json)
+      : id = json['id'],
+        x = json['x'],
+        y = json['y'];
 }

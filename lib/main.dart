@@ -1,3 +1,5 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
@@ -8,15 +10,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:george/assets.dart';
 import 'package:george/characters/friend.dart';
-import 'package:george/characters/player.dart';
-import 'package:george/dialog/dialog_box.dart';
+import 'package:george/characters/player_component.dart';
+import 'package:george/game_state.dart';
 import 'package:george/items/inventory.dart';
 import 'package:george/items/inventory_component.dart';
 import 'package:george/loaders/add_baked_goods.dart';
 import 'package:george/volume_controller.dart';
 
-void main() {
+import 'characters/player.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+      options: FirebaseOptions(
+    apiKey: "AIzaSyBqGnoriuZTW1teb1kFPumXExHVu_87yO4",
+    appId: "1:600369544814:web:8d16d4997969e5ce5bb07f",
+    messagingSenderId: "600369544814",
+    projectId: "george-f574d",
+  ));
 
   runApp(
     MaterialApp(
@@ -38,13 +50,7 @@ void main() {
 
 class GeorgeGame extends FlameGame
     with TapDetector, KeyboardEvents, HasCollisionDetection {
-  late SpriteAnimation downPlayerAnimation;
-  late SpriteAnimation leftPlayerAnimation;
-  late SpriteAnimation upPlayerAnimation;
-  late SpriteAnimation rightPlayerAnimation;
-  late SpriteAnimation idlePlayerAnimation;
-
-  late PlayerComponent george;
+  late List<PlayerComponent> players;
   late double mapWidth;
   late double mapHeight;
 
@@ -52,11 +58,15 @@ class GeorgeGame extends FlameGame
   late AudioPool meetFriend;
   late AudioPool blablabla;
 
+  final gameState = GameState();
+
   int playerDirection = 0;
-  final double animationSpeed = 0.1;
-  final double playerSize = 70;
   final double playerSpeed = 120;
+
   final Inventory inventory = Inventory([], capacity: 16);
+
+  PlayerComponent get george =>
+      players.firstWhere((element) => element.playerId == playerName);
 
   final debugMode = false;
 
@@ -94,45 +104,12 @@ class GeorgeGame extends FlameGame
     overlays.add('volumeController');
     overlays.add('inventory');
 
-    final playerAsset = await images.load(Sprites.player);
-    final spriteSheet = SpriteSheet(
-      image: playerAsset,
-      srcSize: Vector2(48, 48),
-    );
+    players =
+        gameState.players.map((player) => PlayerComponent(player.id)).toList();
 
-    idlePlayerAnimation = spriteSheet.createAnimation(
-      row: 0,
-      stepTime: animationSpeed,
-      to: 1,
-    );
-    downPlayerAnimation = spriteSheet.createAnimation(
-      row: 0,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    leftPlayerAnimation = spriteSheet.createAnimation(
-      row: 1,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    upPlayerAnimation = spriteSheet.createAnimation(
-      row: 2,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    rightPlayerAnimation = spriteSheet.createAnimation(
-      row: 3,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-
-    george = PlayerComponent()
-      ..animation = idlePlayerAnimation
-      ..position = Vector2.all(20)
-      ..debugMode = debugMode
-      ..size = Vector2.all(playerSize);
-
-    add(george);
+    players.forEach((element) {
+      add(element);
+    });
 
     camera.followComponent(
       george,
@@ -140,39 +117,74 @@ class GeorgeGame extends FlameGame
     );
   }
 
+  final playerName = 'lucasbianco';
+
   @override
   void update(double dt) {
     super.update(dt);
 
-    final animations = [
-      idlePlayerAnimation,
-      downPlayerAnimation,
-      leftPlayerAnimation,
-      upPlayerAnimation,
-      rightPlayerAnimation,
-    ];
+    gameState.players.forEach((player) {
+      final playerComponent = players.firstWhere(
+        (element) => element.playerId == player.id,
+      );
+
+      playerComponent.x = player.x;
+      playerComponent.y = player.y;
+    });
+
+    // final animations = [
+    //   idlePlayerAnimation,
+    //   downPlayerAnimation,
+    //   leftPlayerAnimation,
+    //   upPlayerAnimation,
+    //   rightPlayerAnimation,
+    // ];
 
     switch (playerDirection) {
       case 1:
         if (george.y < mapHeight - george.height) {
-          george.y += dt * playerSpeed;
+          FirebaseFirestore.instance
+              .collection('lobby')
+              .doc(playerName)
+              .update({
+            'y': george.y + dt * playerSpeed,
+          });
+          // george.y += dt * playerSpeed;
         }
       case 2:
         if (george.x > 0) {
-          george.x -= dt * playerSpeed;
+          FirebaseFirestore.instance
+              .collection('lobby')
+              .doc(playerName)
+              .update({
+            'x': george.x - dt * playerSpeed,
+          });
+          // george.x -= dt * playerSpeed;
         }
       case 3:
         if (george.y > 0) {
-          george.y -= dt * playerSpeed;
+          FirebaseFirestore.instance
+              .collection('lobby')
+              .doc(playerName)
+              .update({
+            'y': george.y - dt * playerSpeed,
+          });
+          // george.y -= dt * playerSpeed;
         }
       case 4:
         if (george.x < mapWidth - george.width) {
-          george.x += dt * playerSpeed;
+          FirebaseFirestore.instance
+              .collection('lobby')
+              .doc(playerName)
+              .update({
+            'x': george.x + dt * playerSpeed,
+          });
+          // george.x += dt * playerSpeed;
         }
         break;
     }
 
-    george.animation = animations[playerDirection];
+    // george.animation = animations[playerDirection];
   }
 
   @override
