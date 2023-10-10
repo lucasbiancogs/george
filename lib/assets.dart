@@ -12,4 +12,5 @@ class Audios {
 
 class Maps {
   static const String georgeTown = 'george_town.tmx';
+  static const String happyVillage = 'happy_village.tmx';
 }

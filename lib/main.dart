@@ -54,7 +54,7 @@ class GeorgeGame extends FlameGame
 
   int playerDirection = 0;
   final double animationSpeed = 0.1;
-  final double playerSize = 70;
+  final double playerSize = 40;
   final double playerSpeed = 120;
   final Inventory inventory = Inventory([], capacity: 16);
 
@@ -64,14 +64,14 @@ class GeorgeGame extends FlameGame
   Future<void> onLoad() async {
     await super.onLoad();
 
-    final map = await TiledComponent.load(Maps.georgeTown, Vector2.all(16));
+    final map = await TiledComponent.load(Maps.happyVillage, Vector2.all(16));
 
     meetFriend = await FlameAudio.createPool(Audios.hello, maxPlayers: 1);
     pickMeal = await FlameAudio.createPool(Audios.nhaum, maxPlayers: 1);
     blablabla = await FlameAudio.createPool(Audios.blablabla, maxPlayers: 1);
 
     add(map);
-    addBakedGoods(map, this);
+    // addBakedGoods(map, this);
 
     mapHeight = map.tileMap.map.height * 16;
     mapWidth = map.tileMap.map.width * 16;
@@ -126,9 +126,12 @@ class GeorgeGame extends FlameGame
       to: 4,
     );
 
+    final respawnLayer = map.tileMap.getLayer<ObjectGroup>('respawn');
+    final respawn = respawnLayer!.objects.first;
+
     george = PlayerComponent()
       ..animation = idlePlayerAnimation
-      ..position = Vector2.all(20)
+      ..position = Vector2(respawn.x, respawn.y)
       ..debugMode = debugMode
       ..size = Vector2.all(playerSize);
 
