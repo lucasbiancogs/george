@@ -9,8 +9,8 @@ void addBakedGoods(TiledComponent homeMap, GeorgeGame game) {
 
   bakedGoodsGroup?.objects.forEach((bakedGoodBox) {
     final bakedGood = Item(
-      name: bakedGoodBox.type,
-      sprite: '${bakedGoodBox.type}.png',
+      name: bakedGoodBox.name,
+      sprite: '${bakedGoodBox.name}.png',
     );
 
     final bakedGoodComponent = BakedGoodComponent(

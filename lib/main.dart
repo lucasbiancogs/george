@@ -1,18 +1,20 @@
+import 'dart:async';
+
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/input.dart';
-import 'package:flame/sprite.dart';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_tiled/flame_tiled.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:george/assets.dart';
-import 'package:george/characters/friend.dart';
+import 'package:george/characters/obstacles.dart';
 import 'package:george/characters/player.dart';
-import 'package:george/dialog/dialog_box.dart';
 import 'package:george/items/inventory.dart';
 import 'package:george/items/inventory_component.dart';
 import 'package:george/loaders/add_baked_goods.dart';
+import 'package:george/loaders/add_friends.dart';
+import 'package:george/loaders/add_obstacles.dart';
 import 'package:george/volume_controller.dart';
 
 void main() {
@@ -38,12 +40,6 @@ void main() {
 
 class GeorgeGame extends FlameGame
     with TapDetector, KeyboardEvents, HasCollisionDetection {
-  late SpriteAnimation downPlayerAnimation;
-  late SpriteAnimation leftPlayerAnimation;
-  late SpriteAnimation upPlayerAnimation;
-  late SpriteAnimation rightPlayerAnimation;
-  late SpriteAnimation idlePlayerAnimation;
-
   late PlayerComponent george;
   late double mapWidth;
   late double mapHeight;
@@ -52,16 +48,20 @@ class GeorgeGame extends FlameGame
   late AudioPool meetFriend;
   late AudioPool blablabla;
 
-  int playerDirection = 0;
-  final double animationSpeed = 0.1;
-  final double playerSize = 40;
-  final double playerSpeed = 120;
+  MovementDirection playerDirection = MovementDirection.idle;
+  // TODO(lucasbiancogs): Refactor this
+  CollisionIntersectionSurface collisionDirection =
+      CollisionIntersectionSurface.notColliding;
+
   final Inventory inventory = Inventory([], capacity: 16);
 
-  final debugMode = false;
+  final StreamController<Vector2> _positionStream =
+      StreamController.broadcast();
 
   @override
   Future<void> onLoad() async {
+    debugMode = false;
+
     await super.onLoad();
 
     final map = await TiledComponent.load(Maps.happyVillage, Vector2.all(16));
@@ -71,22 +71,13 @@ class GeorgeGame extends FlameGame
     blablabla = await FlameAudio.createPool(Audios.blablabla, maxPlayers: 1);
 
     add(map);
-    // addBakedGoods(map, this);
+    addBakedGoods(map, this);
 
     mapHeight = map.tileMap.map.height * 16;
     mapWidth = map.tileMap.map.width * 16;
 
-    final friendsGroup = map.tileMap.getLayer<ObjectGroup>('friends');
-
-    friendsGroup?.objects.forEach((friendBox) {
-      final friendComponent = FriendComponent()
-        ..position = Vector2(friendBox.x, friendBox.y)
-        ..width = friendBox.width
-        ..height = friendBox.height
-        ..debugMode = debugMode;
-
-      add(friendComponent);
-    });
+    addFriends(map, this);
+    addObstacles(map, this);
 
     FlameAudio.bgm.initialize();
     FlameAudio.audioCache.load(Audios.ukulele);
@@ -94,46 +85,12 @@ class GeorgeGame extends FlameGame
     overlays.add('volumeController');
     overlays.add('inventory');
 
-    final playerAsset = await images.load(Sprites.player);
-    final spriteSheet = SpriteSheet(
-      image: playerAsset,
-      srcSize: Vector2(48, 48),
-    );
-
-    idlePlayerAnimation = spriteSheet.createAnimation(
-      row: 0,
-      stepTime: animationSpeed,
-      to: 1,
-    );
-    downPlayerAnimation = spriteSheet.createAnimation(
-      row: 0,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    leftPlayerAnimation = spriteSheet.createAnimation(
-      row: 1,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    upPlayerAnimation = spriteSheet.createAnimation(
-      row: 2,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-    rightPlayerAnimation = spriteSheet.createAnimation(
-      row: 3,
-      stepTime: animationSpeed,
-      to: 4,
-    );
-
     final respawnLayer = map.tileMap.getLayer<ObjectGroup>('respawn');
     final respawn = respawnLayer!.objects.first;
 
-    george = PlayerComponent()
-      ..animation = idlePlayerAnimation
+    george = PlayerComponent(positionStream: _positionStream.stream)
       ..position = Vector2(respawn.x, respawn.y)
-      ..debugMode = debugMode
-      ..size = Vector2.all(playerSize);
+      ..debugMode = debugMode;
 
     add(george);
 
@@ -147,35 +104,41 @@ class GeorgeGame extends FlameGame
   void update(double dt) {
     super.update(dt);
 
-    final animations = [
-      idlePlayerAnimation,
-      downPlayerAnimation,
-      leftPlayerAnimation,
-      upPlayerAnimation,
-      rightPlayerAnimation,
-    ];
+    // TODO(lucasbiancogs): Refactor this
+    Vector2? newPosition;
 
     switch (playerDirection) {
-      case 1:
+      case MovementDirection.down:
         if (george.y < mapHeight - george.height) {
-          george.y += dt * playerSpeed;
+          final y = george.y + 5;
+          newPosition = Vector2(george.x, y);
         }
-      case 2:
+        break;
+      case MovementDirection.left:
         if (george.x > 0) {
-          george.x -= dt * playerSpeed;
+          final x = george.x - 5;
+          newPosition = Vector2(x, george.y);
         }
-      case 3:
+        break;
+      case MovementDirection.up:
         if (george.y > 0) {
-          george.y -= dt * playerSpeed;
+          final y = george.y - 5;
+          newPosition = Vector2(george.x, y);
         }
-      case 4:
+        break;
+      case MovementDirection.right:
         if (george.x < mapWidth - george.width) {
-          george.x += dt * playerSpeed;
+          final x = george.x + 5;
+          newPosition = Vector2(x, george.y);
         }
+        break;
+      case MovementDirection.idle:
         break;
     }
 
-    george.animation = animations[playerDirection];
+    if (newPosition != null) {
+      _positionStream.add(newPosition);
+    }
   }
 
   @override
@@ -186,7 +149,7 @@ class GeorgeGame extends FlameGame
     final keyPressing = keysPressed.isNotEmpty;
 
     if (!keyPressing) {
-      playerDirection = 0;
+      playerDirection = MovementDirection.idle;
       return KeyEventResult.handled;
     }
 
@@ -198,23 +161,23 @@ class GeorgeGame extends FlameGame
 
     if (keyPressing) {
       if (isKeyDown) {
-        playerDirection = 1;
+        playerDirection = MovementDirection.down;
         return KeyEventResult.handled;
       }
       if (isKeyLeft) {
-        playerDirection = 2;
+        playerDirection = MovementDirection.left;
         return KeyEventResult.handled;
       }
       if (isKeyUp) {
-        playerDirection = 3;
+        playerDirection = MovementDirection.up;
         return KeyEventResult.handled;
       }
       if (isKeyRight) {
-        playerDirection = 4;
+        playerDirection = MovementDirection.right;
         return KeyEventResult.handled;
       }
     } else {
-      playerDirection = 0;
+      playerDirection = MovementDirection.idle;
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -222,10 +185,7 @@ class GeorgeGame extends FlameGame
 
   @override
   void onTapUp(TapUpInfo info) {
-    if (playerDirection >= 4) {
-      playerDirection = 0;
-    } else {
-      playerDirection++;
-    }
+    final position = info.eventPosition.game;
+    _positionStream.add(position);
   }
 }
